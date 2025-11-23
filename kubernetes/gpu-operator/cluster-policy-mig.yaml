@@ -1,0 +1,116 @@
+# Copyright 2024 [your name/company]
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: nvidia.com/v1
+kind: ClusterPolicy
+metadata:
+  name: cluster-policy-mig
+  namespace: gpu-operator-resources
+spec:
+  # Device Plugin Configuration for MIG
+  devicePlugin:
+    config:
+      name: default
+      sharing:
+        migStrategy: "mixed"  # Use mixed strategy for MIG
+  # DCGM Exporter for metrics
+  dcgmExporter:
+    enabled: true
+    image:
+      repository: nvcr.io/nvidia/k8s/dcgm-exporter
+      tag: "3.3.0-3.1.8-ubuntu22.04"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  # Driver configuration
+  driver:
+    enabled: true
+    image:
+      repository: nvcr.io/nvidia/driver
+      tag: "535.104.05"
+    use_ocp_driver_toolkit: false
+  # GPU Feature Discovery
+  gfd:
+    enabled: true
+    image:
+      repository: nvcr.io/nvidia/gpu-feature-discovery
+      tag: "v0.8.2"
+  # MIG Manager (enabled for MIG nodes)
+  migManager:
+    enabled: true
+    config:
+      name: default
+      migConfigs:
+        all-disabled:
+          - devices: all
+            migEnabled: false
+        all-3g.40gb:
+          - devices: all
+            migEnabled: true
+            deviceFilter: "0"
+            migDevices:
+              "3g.40gb": 1
+        all-2g.20gb:
+          - devices: all
+            migEnabled: true
+            deviceFilter: "0"
+            migDevices:
+              "2g.20gb": 1
+        all-1g.10gb:
+          - devices: all
+            migEnabled: true
+            deviceFilter: "0"
+            migDevices:
+              "1g.10gb": 1
+        # Mixed profile: 1x 3g.40gb + 2x 2g.20gb (recommended)
+        mixed-3g40gb-2g20gb:
+          - devices: all
+            migEnabled: true
+            deviceFilter: "0"
+            migDevices:
+              "3g.40gb": 1
+              "2g.20gb": 2
+  # Node Feature Discovery
+  nodeFeatureDiscovery:
+    image:
+      repository: nvcr.io/nvidia/gpu-operator
+      tag: "v23.9.0"
+  # Operator configuration
+  operator:
+    defaultRuntime: containerd
+    initContainer:
+      image:
+        repository: nvcr.io/nvidia/operator
+        tag: "v23.9.0"
+    runtimeClass: nvidia
+  # Toolkit configuration
+  toolkit:
+    enabled: true
+    image:
+      repository: nvcr.io/nvidia/container-toolkit
+      tag: "v1.14.0-ubuntu22.04"
+    env:
+    - name: CONTAINERD_CONFIG
+      value: /etc/containerd/config.toml
+    - name: CONTAINERD_SOCKET
+      value: /run/containerd/containerd.sock
+    - name: CONTAINERD_RUNTIME_CLASS
+      value: nvidia
+    - name: CONTAINERD_SET_AS_DEFAULT
+      value: "true"
+

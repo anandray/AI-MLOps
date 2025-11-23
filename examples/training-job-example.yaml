@@ -1,0 +1,121 @@
+# Example: Submit a PyTorch training job
+# This example shows how to submit a distributed training job using time-sliced GPUs
+
+apiVersion: kubeflow.org/v1
+kind: PyTorchJob
+metadata:
+  name: llama2-finetuning
+  namespace: training
+spec:
+  pytorchReplicaSpecs:
+    Master:
+      replicas: 1
+      restartPolicy: OnFailure
+      template:
+        spec:
+          priorityClassName: training
+          nodeSelector:
+            workload-type: training
+            gpu-sharing: timeslice
+            gpu-type: h100  # Use H100 for fine-tuning
+          tolerations:
+          - key: gpu
+            operator: Equal
+            value: "h100"
+            effect: NoSchedule
+          containers:
+          - name: pytorch
+            image: pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
+            command:
+            - python
+            - train.py
+            - --model=llama2-7b
+            - --dataset=/datasets/llama2-finetune
+            - --epochs=10
+            - --batch-size=4
+            - --learning-rate=2e-5
+            - --checkpoint-dir=/checkpoints
+            - --mlflow-tracking-uri=http://mlflow-tracking-server.mlops.svc.cluster.local:5000
+            env:
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb-secret
+                  key: api-key
+            - name: WANDB_PROJECT
+              value: "llama2-finetuning"
+            resources:
+              limits:
+                nvidia.com/gpu: 1
+                memory: 40Gi
+                cpu: 8
+              requests:
+                nvidia.com/gpu: 1
+                memory: 40Gi
+                cpu: 8
+            volumeMounts:
+            - name: datasets
+              mountPath: /datasets
+            - name: checkpoints
+              mountPath: /checkpoints
+            - name: models
+              mountPath: /models
+          volumes:
+          - name: datasets
+            persistentVolumeClaim:
+              claimName: datasets-pvc
+          - name: checkpoints
+            persistentVolumeClaim:
+              claimName: checkpoints-pvc
+          - name: models
+            persistentVolumeClaim:
+              claimName: models-pvc
+    Worker:
+      replicas: 3
+      restartPolicy: OnFailure
+      template:
+        spec:
+          priorityClassName: training
+          nodeSelector:
+            workload-type: training
+            gpu-sharing: timeslice
+            gpu-type: h100
+          tolerations:
+          - key: gpu
+            operator: Equal
+            value: "h100"
+            effect: NoSchedule
+          containers:
+          - name: pytorch
+            image: pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
+            command:
+            - python
+            - train.py
+            - --model=llama2-7b
+            - --dataset=/datasets/llama2-finetune
+            - --epochs=10
+            - --batch-size=4
+            - --learning-rate=2e-5
+            - --checkpoint-dir=/checkpoints
+            resources:
+              limits:
+                nvidia.com/gpu: 1
+                memory: 40Gi
+                cpu: 8
+              requests:
+                nvidia.com/gpu: 1
+                memory: 40Gi
+                cpu: 8
+            volumeMounts:
+            - name: datasets
+              mountPath: /datasets
+            - name: checkpoints
+              mountPath: /checkpoints
+          volumes:
+          - name: datasets
+            persistentVolumeClaim:
+              claimName: datasets-pvc
+          - name: checkpoints
+            persistentVolumeClaim:
+              claimName: checkpoints-pvc
+

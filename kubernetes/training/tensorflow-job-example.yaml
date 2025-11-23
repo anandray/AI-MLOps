@@ -1,0 +1,119 @@
+# Copyright 2024 [your name/company]
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: kubeflow.org/v1
+kind: TFJob
+metadata:
+  name: tensorflow-training-example
+  namespace: training
+spec:
+  tfReplicaSpecs:
+    Chief:
+      replicas: 1
+      restartPolicy: OnFailure
+      template:
+        metadata:
+          annotations:
+            prometheus.io/scrape: "true"
+            prometheus.io/port: "9090"
+        spec:
+          priorityClassName: training
+          nodeSelector:
+            workload-type: training
+            gpu-sharing: timeslice
+          tolerations:
+          - key: gpu
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+          containers:
+          - name: tensorflow
+            image: tensorflow/tensorflow:2.13.0-gpu
+            command:
+            - python
+            - train.py
+            - --epochs=100
+            - --batch-size=32
+            - --checkpoint-dir=/checkpoints
+            resources:
+              limits:
+                nvidia.com/gpu: 1
+                memory: 32Gi
+                cpu: 8
+              requests:
+                nvidia.com/gpu: 1
+                memory: 32Gi
+                cpu: 8
+            volumeMounts:
+            - name: datasets
+              mountPath: /datasets
+            - name: checkpoints
+              mountPath: /checkpoints
+            - name: models
+              mountPath: /models
+          volumes:
+          - name: datasets
+            persistentVolumeClaim:
+              claimName: datasets-pvc
+          - name: checkpoints
+            persistentVolumeClaim:
+              claimName: checkpoints-pvc
+          - name: models
+            persistentVolumeClaim:
+              claimName: models-pvc
+    Worker:
+      replicas: 3
+      restartPolicy: OnFailure
+      template:
+        spec:
+          priorityClassName: training
+          nodeSelector:
+            workload-type: training
+            gpu-sharing: timeslice
+          tolerations:
+          - key: gpu
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+          containers:
+          - name: tensorflow
+            image: tensorflow/tensorflow:2.13.0-gpu
+            command:
+            - python
+            - train.py
+            - --epochs=100
+            - --batch-size=32
+            - --checkpoint-dir=/checkpoints
+            resources:
+              limits:
+                nvidia.com/gpu: 1
+                memory: 32Gi
+                cpu: 8
+              requests:
+                nvidia.com/gpu: 1
+                memory: 32Gi
+                cpu: 8
+            volumeMounts:
+            - name: datasets
+              mountPath: /datasets
+            - name: checkpoints
+              mountPath: /checkpoints
+          volumes:
+          - name: datasets
+            persistentVolumeClaim:
+              claimName: datasets-pvc
+          - name: checkpoints
+            persistentVolumeClaim:
+              claimName: checkpoints-pvc
+

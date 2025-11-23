@@ -1,0 +1,140 @@
+# Copyright 2024 [your name/company]
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autogen-conversation
+  namespace: agentic
+  labels:
+    app: autogen-conversation
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: autogen-conversation
+  template:
+    metadata:
+      labels:
+        app: autogen-conversation
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        linkerd.io/inject: enabled
+    spec:
+      priorityClassName: critical-agents
+      nodeSelector:
+        workload-type: critical-agents
+        mig-profile: "2g.20gb"
+      tolerations:
+      - key: gpu
+        operator: Equal
+        value: "mig"
+        effect: NoSchedule
+      containers:
+      - name: autogen
+        image: microsoft/autogen:latest
+        command:
+        - python
+        - -m
+        - uvicorn
+        - app:app
+        - --host=0.0.0.0
+        - --port=8000
+        env:
+        - name: LLM_API_BASE
+          value: "http://vllm-inference-server.inference.svc.cluster.local:8000/v1"
+        - name: LLM_API_KEY
+          value: "not-required"
+        - name: NUM_AGENTS
+          value: "3"
+        - name: MAX_ITERATIONS
+          value: "10"
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            memory: 20Gi
+            cpu: 4
+          requests:
+            nvidia.com/gpu: 1
+            memory: 20Gi
+            cpu: 4
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+        - name: conversations
+          mountPath: /app/conversations
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: autogen-config
+      - name: conversations
+        persistentVolumeClaim:
+          claimName: autogen-conversations-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autogen-conversation
+  namespace: agentic
+  labels:
+    app: autogen-conversation
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: autogen-conversation
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: autogen-config
+  namespace: agentic
+data:
+  config.yaml: |
+    agents:
+      - name: assistant
+        type: AssistantAgent
+        system_message: "You are a helpful assistant"
+      - name: user_proxy
+        type: UserProxyAgent
+        human_input_mode: "NEVER"
+      - name: executor
+        type: ExecutorAgent
+        code_execution_config:
+          work_dir: "/app/conversations"
+    conversation_config:
+      max_rounds: 10
+      termination_msg: "TERMINATE"
+
