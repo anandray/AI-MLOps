@@ -4,6 +4,8 @@
 
 This document describes the architecture of the AI/MLOps platform running on AWS EKS with mixed GPU node pools.
 
+> **📊 Interactive Diagrams**: For comprehensive visual diagrams including system architecture, component interactions, data flows, and deployment pipelines, see [system-architecture-diagram.md](./system-architecture-diagram.md).
+
 ## Architecture Diagram
 
 ```
